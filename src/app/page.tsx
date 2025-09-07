@@ -1,7 +1,7 @@
 'use client';
 
 import { useFinanceiro } from '@/hooks/useFinanceiro';
-import DashboardFinanceiro from '@/components/DashboardFinanceiro';
+import DashboardFinanceiro from '@/components/dashboard/DashboardFinanceiro';
 import Loading from '@/components/Loading';
 import ErrorMessage from '@/components/ErrorMessage';
 
