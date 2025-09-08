@@ -652,8 +652,8 @@ export default function DashboardFinanceiro() {
         {/* Header */}
         <header className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
           <div>
-            <h1 className="text-3xl font-bold drop-shadow">Financial Dashboard Template</h1>
-            <p className="text-sm text-white/80 mt-1">Painel financeiro estilizado — baseado na imagem de referência</p>
+            <h1 className="text-5xl font-bold drop-shadow">RisofloraFinance</h1>
+            <p className="text-sm text-white/80 mt-1">um pé na roça e outro no jardim</p>
           </div>
 
           <div className="flex items-center gap-3">
@@ -681,9 +681,9 @@ export default function DashboardFinanceiro() {
             {/* Resumo ampliado com cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="from-white/5 to-white/2 border border-white/10">
-                <div className="text-sm text-white/80">Total Entradas</div>
+                <div className={`text-sm ${!dark ? 'text-gray-500' : 'text-white/80'}`}>Total Entradas</div>
                 <div className="text-2xl font-bold mt-2">{formatarValor(entradas || 0)}</div>
-                <div className="text-xs text-white/60 mt-1">vs previous month</div>
+                <div className={`text-xs mt-1 ${dark ? 'text-white/80' : 'text-gray-500'}`}>vs previous month</div>
               </Card>
 
               <Card className="bg-gradient-to-br from-purple-500 to-indigo-500 text-white border border-white/10">
@@ -693,16 +693,16 @@ export default function DashboardFinanceiro() {
               </Card>
 
               <div className='bg-white rounded-lg p-5'>
-                <div className="text-xl text-gray-600 font-bold">Saldo Total</div>
+                <div className="text-2xl font-bold mt-2">Saldo Total</div>
                 <div className={`text-5xl font-bold mt-2 ${saldo > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatarValor(saldo)}</div>
                 <div className="text-sm text-gray-600 bold-500 mt-1">{formatarValor(entradas)} - {formatarValor(saidas)}</div>
               </div>
 
               <Card>
                 <div className="mt-3 space-y-1 text-xs text-white/60">
-                  <div className='text-sm'>Total de transações:</div>
-                  <div className='text-2xl font-bold mt-2'>{transFiltradas.length}</div>
-                  <div className='text-xs'>
+                  <div className={`text-sm ${!dark ? 'text-gray-500' : 'text-white/80'}`}>Total de transações:</div>
+                  <div className={`text-2xl font-bold mt-2 ${dark ? 'text-white/80' : 'text-black'}`}>{transFiltradas.length}</div>
+                  <div className={`text-xs mt-1 ${dark ? 'text-white/80' : 'text-gray-500'}`}>
                     Ticket médio:{' '}
                     {formatarValor(
                       transFiltradas.length > 0
@@ -818,10 +818,10 @@ export default function DashboardFinanceiro() {
               {/* paginação simples */}
               <div className="flex items-center justify-between mt-4">
                 <div className="flex gap-2">
-                  <button disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Primeira</button>
-                  <button disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Anterior</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Próxima</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Última</button>
+                  <button disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Primeira</button>
+                  <button disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white/90">Anterior</button>
+                  <button disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))} className={`px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white`}>Próxima</button>
+                  <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Última</button>
                 </div>
                 <div className="text-sm text-white/70">Página {page} de {totalPages}</div>
               </div>
