@@ -13,31 +13,16 @@ import {
   YAxis,
   CartesianGrid,
 } from 'recharts';
+import { Transacao } from '@/types/Transacao'
 
 /**
- * DashboardFinanceiro_improved.tsx
- * - Arquivo único (TypeScript + React) — mantive a estrutura e funcionalidades
- * - Melhorias visuais (cards, grid, destaque, feedback de import, donut à direita)
- * - Componentizei dentro do mesmo arquivo para facilitar futura extração
- * - Use TailwindCSS + recharts (instalar `recharts`)
+ * DashboardFinanceiro.tsx
+ * - Arquivo único, TypeScript + React (Next.js 'use client')
+ * - Contém Modal, parser CSV, gráficos, lista com paginação simples e edição/adição de categoria
+ * - Use TailwindCSS + recharts
  */
 
-/******************************
- * Types & Constants
- ******************************/
-type Transacao = {
-  data: string; // DD/MM/YYYY
-  valor: number; // positivo = entrada, negativo = saída
-  identificador: string;
-  descricao: string;
-  categoria: string;
-  formaPagamento?: string;
-  destinatario?: string;
-  parcelas?: string;
-  origemArquivo?: string;
-};
-
-const STORAGE_KEY = 'uli_transacoes_v4_improved';
+const STORAGE_KEY = 'uli_transacoes_v4';
 
 const CATEGORIAS_INICIAIS = [
   'Alimentação',
@@ -138,7 +123,7 @@ function parseCsvContent(content: string, origem = 'arquivo'): Transacao[] {
   for (let i = start; i < linhas.length; i++) {
     const row = linhas[i];
     const sep = detectarSeparador(row);
-    const cols = row.split(sep).map((c) => c.trim());
+    const cols = row.split(sep).map((c) => c.trim()).filter((c) => c !== '');
 
     let dataRaw = '',
       valorRaw = '',
@@ -197,46 +182,72 @@ function parseCsvContent(content: string, origem = 'arquivo'): Transacao[] {
   return resultados;
 }
 
-async function parseMultipleCsvFiles(files: File[]): Promise<{ parsed: Transacao[]; summary: { imported: number; duplicates: number; totalRows: number } }> {
+async function parseMultipleCsvFiles(files: File[]): Promise<Transacao[]> {
   const all: Transacao[] = [];
-  let totalRows = 0;
   for (const f of files) {
     try {
       const text = await f.text();
-      const parsed = parseCsvContent(text, f.name);
-      totalRows += parsed.length;
-      all.push(...parsed);
+      all.push(...parseCsvContent(text, f.name));
     } catch (e) {
       console.error('Erro ao ler', f.name, e);
     }
   }
   const map = new Map<string, Transacao>();
-  let duplicates = 0;
-  for (const t of all) {
-    if (!map.has(t.identificador)) map.set(t.identificador, t);
-    else duplicates++;
-  }
-  const unique = Array.from(map.values()).sort((a, b) => dataParaTimestamp(b.data) - dataParaTimestamp(a.data));
-  return { parsed: unique, summary: { imported: unique.length, duplicates, totalRows } };
+  for (const t of all) if (!map.has(t.identificador)) map.set(t.identificador, t);
+  return Array.from(map.values()).sort((a, b) => dataParaTimestamp(b.data) - dataParaTimestamp(a.data));
 }
 
 /******************************
- * Small UI primitives (componentizados)
+ * Small UI primitives
  ******************************/
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`rounded-2xl p-4 shadow-2xl bg-white/5 backdrop-blur-sm ${className}`}>{children}</div>
+  <div className={`rounded-2xl p-4 shadow-lg bg-gradient-to-br ${className}`}>{children}</div>
 );
 
 const Badge: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="text-xs px-2 py-0.5 rounded-full bg-white/6">{children}</span>
 );
 
-function IconSparkle() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2l1.7 3.4L17 7l-3.3 1.6L12 12l-1.7-3.4L7 7l3.3-1.6L12 2z" fill="currentColor" opacity="0.9" />
-    </svg>
-  );
+/******************************
+ * Export CSV util
+ ******************************/
+function exportCsv(trans: Transacao[]) {
+  if (!trans.length) return;
+  const headers = ['Data', 'Valor', 'Descrição', 'Categoria', 'FormaPagamento', 'Destinatário', 'Parcelas', 'Origem', 'ID'];
+  const rows = trans.map((t) => [
+    t.data,
+    t.valor,
+    t.descricao,
+    t.categoria,
+    t.formaPagamento || '',
+    t.destinatario || '',
+    t.parcelas || '',
+    t.origemArquivo || '',
+    t.identificador,
+  ]);
+  const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `transacoes_filtradas_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/******************************
+ * Pagination hook (simple)
+ ******************************/
+function useSimplePagination(itemsLength: number, perPage: number) {
+  const [page, setPage] = useState<number>(1);
+  const total = Math.max(1, Math.ceil(itemsLength / perPage));
+  useEffect(() => {
+    if (page > total) setPage(total);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsLength, perPage, total]);
+  const start = (page - 1) * perPage;
+  const end = Math.min(start + perPage, itemsLength);
+  return { page, setPage, total, start, end };
 }
 
 /******************************
@@ -244,10 +255,10 @@ function IconSparkle() {
  ******************************/
 function GraficoPizza({ dados }: { dados: { name: string; value: number }[] }) {
   return (
-    <div style={{ width: '100%', height: 220 }} className="py-2">
+    <div style={{ width: '100%', height: 220 }}>
       <ResponsiveContainer>
         <PieChart>
-          <Pie data={dados} dataKey="value" nameKey="name" innerRadius={40} outerRadius={70} paddingAngle={4} label={(entry) => entry.name}>
+          <Pie data={dados} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={4} label={(entry) => entry.name}>
             {dados.map((d, i) => (
               <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
             ))}
@@ -261,10 +272,10 @@ function GraficoPizza({ dados }: { dados: { name: string; value: number }[] }) {
 
 function GraficoLinha({ pontos }: { pontos: { date: string; saldo: number }[] }) {
   return (
-    <div style={{ width: '100%', height: 240 }} className="py-2">
+    <div style={{ width: '100%', height: 240 }}>
       <ResponsiveContainer>
         <LineChart data={pontos} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.06} />
+          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.05} />
           <XAxis dataKey="date" tick={{ fontSize: 12 }} />
           <YAxis tickFormatter={(v) => formatarValor(v as number)} width={80} />
           <ReTooltip formatter={(val: number) => formatarValor(val)} />
@@ -275,36 +286,8 @@ function GraficoLinha({ pontos }: { pontos: { date: string; saldo: number }[] })
   );
 }
 
-function DonutWidget({ value, target = 1 }: { value: number; target?: number }) {
-  const percentual = Math.max(0, Math.min(1, value / target));
-  const remainder = 1 - percentual;
-  const display = Math.round(percentual * 100);
-  return (
-    <div className="w-full p-4">
-      <div className="rounded-2xl bg-white/90 p-6 shadow-inner flex flex-col items-center justify-center">
-        <div style={{ width: 220, height: 220 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={[{ v: percentual }, { v: remainder }]} dataKey="v" cx="50%" cy="50%" innerRadius={72} outerRadius={96} startAngle={90} endAngle={-270}>
-                <Cell key="a" fill="#7c3aed" />
-                <Cell key="b" fill="#eee" />
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="-mt-40 text-center">
-          <div className="text-sm text-slate-500">Net Profit Margin %</div>
-          <div className="text-4xl font-bold text-rose-500">{display}%</div>
-          <div className="text-xs text-slate-400">Target {Math.round(target * 100)}%</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /******************************
- * Modal (inline)
+ * Modal (inline, corrigido)
  ******************************/
 function ModalNovaTransacao({
   open,
@@ -374,22 +357,22 @@ function ModalNovaTransacao({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
-            <label className="text-xs">Data</label>
+            <Label>Data</Label>
             <input type="date" className="w-full p-2 rounded bg-slate-700 text-white" value={form.data} onChange={(e) => setForm((f) => ({ ...f, data: e.target.value }))} />
           </div>
 
           <div>
-            <label className="text-xs">Valor</label>
+            <Label>Valor</Label>
             <input placeholder="1234,56" className="w-full p-2 rounded bg-slate-700 text-white" value={form.valor} onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))} />
           </div>
 
           <div className="md:col-span-2">
-            <label className="text-xs">Descrição</label>
+            <Label>Descrição</Label>
             <input className="w-full p-2 rounded bg-slate-700 text-white" value={form.descricao} onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))} />
           </div>
 
           <div>
-            <label className="text-xs">Categoria</label>
+            <Label>Categoria</Label>
             <select className="w-full p-2 rounded bg-slate-700 text-white" value={form.categoria} onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}>
               {categorias.map((c) => (
                 <option key={c} value={c}>
@@ -400,24 +383,24 @@ function ModalNovaTransacao({
           </div>
 
           <div>
-            <label className="text-xs">Forma de pagamento</label>
+            <Label>Forma de pagamento</Label>
             <input className="w-full p-2 rounded bg-slate-700 text-white" value={form.formaPagamento} onChange={(e) => setForm((f) => ({ ...f, formaPagamento: e.target.value }))} />
           </div>
 
           <div>
-            <label className="text-xs">Destinatário</label>
+            <Label>Destinatário</Label>
             <input className="w-full p-2 rounded bg-slate-700 text-white" value={form.destinatario} onChange={(e) => setForm((f) => ({ ...f, destinatario: e.target.value }))} />
           </div>
 
           <div>
-            <label className="text-xs">Parcelas (opcional)</label>
+            <Label>Parcelas (opcional)</Label>
             <input className="w-full p-2 rounded bg-slate-700 text-white" value={form.parcelas} onChange={(e) => setForm((f) => ({ ...f, parcelas: e.target.value }))} />
           </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-4">
           <button onClick={onClose} className="px-3 py-2 rounded bg-slate-700">Cancelar</button>
-          <button onClick={submit} className="px-4 py-2 rounded bg-gradient-to-r from-green-500 to-emerald-400 text-slate-900 font-semibold">Adicionar</button>
+          <button onClick={submit} className="px-4 py-2 rounded bg-gradient-to-r from-green-500 to-emerald-400 text-white">Adicionar</button>
         </div>
       </div>
     </div>
@@ -425,7 +408,7 @@ function ModalNovaTransacao({
 }
 
 /******************************
- * Main: DashboardFinanceiro (improved)
+ * Main: DashboardFinanceiro
  ******************************/
 export default function DashboardFinanceiro() {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -441,12 +424,6 @@ export default function DashboardFinanceiro() {
   const [tipoFiltro, setTipoFiltro] = useState<'todos' | 'entradas' | 'saidas'>('todos');
   const [termo, setTermo] = useState('');
   const [limite, setLimite] = useState<number>(20);
-
-  // feedback import
-  const [importSummary, setImportSummary] = useState<{ imported: number; duplicates: number; totalRows: number } | null>(null);
-
-  // nova categoria controlada
-  const [novaCategoriaInput, setNovaCategoriaInput] = useState('');
 
   // load
   useEffect(() => {
@@ -471,23 +448,15 @@ export default function DashboardFinanceiro() {
     }
   }, [trans]);
 
-  // import (sobrescrever conforme pedido)
+  // import (overwrite)
   const handleFiles = async (files: FileList | null) => {
     if (!files) return;
     const arr = Array.from(files);
-    const { parsed, summary } = await parseMultipleCsvFiles(arr);
-    setTrans(parsed); // sobrescreve
-    setImportSummary(summary);
-
+    const parsed = await parseMultipleCsvFiles(arr);
+    setTrans(parsed);
     // add categories found
     const cats = Array.from(new Set([...categorias, ...parsed.map((p) => p.categoria || '')].filter(Boolean)));
     setCategorias(cats);
-
-    // limpa o input
-    if (fileRef.current) fileRef.current.value = '';
-
-    // limpa summary depois de 6s
-    setTimeout(() => setImportSummary(null), 6000);
   };
 
   // add manual
@@ -611,16 +580,10 @@ export default function DashboardFinanceiro() {
     return Array.from(map.values()).sort((a, b) => b.count - a.count).slice(0, 5);
   }, [transFiltradas]);
 
-  // pagination simple
-  const perPage = limite;
-  const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(transFiltradas.length / perPage));
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [transFiltradas.length, perPage, totalPages, page]);
-  const start = (page - 1) * perPage;
-  const end = Math.min(start + perPage, transFiltradas.length);
-  useEffect(() => setPage(1), [limite]);
+  // pagination
+  // reset page when limite changes
+  const { page, setPage, total, start, end } = useSimplePagination(transFiltradas.length, limite);
+  useEffect(() => setPage(1), [limite]); // reset to page 1 when per-page changes
 
   // inline category editing
   const [editingCategoriaFor, setEditingCategoriaFor] = useState<string | null>(null);
@@ -629,7 +592,6 @@ export default function DashboardFinanceiro() {
   function atribuirCategoria(id: string, categoria: string) {
     if (categoria === '__nova') {
       setEditingCategoriaFor(id);
-      setNovaCategoriaTempForId((s) => ({ ...s, [id]: '' }));
       return;
     }
     setTrans((prev) => prev.map((t) => (t.identificador === id ? { ...t, categoria } : t)));
@@ -647,89 +609,83 @@ export default function DashboardFinanceiro() {
   }
 
   return (
-    <div className={`${dark ? 'bg-gradient-to-br from-purple-700 to-indigo-600 text-white' : 'bg-white text-slate-900'} min-h-screen p-8`}> 
+    <div className={`${dark ? 'bg-slate-950 text-white' : 'bg-white text-slate-900'} min-h-screen p-6`}>
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
         <header className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
           <div>
-            <h1 className="text-3xl font-bold drop-shadow">Financial Dashboard Template</h1>
-            <p className="text-sm text-white/80 mt-1">Painel financeiro estilizado — baseado na imagem de referência</p>
+            <h1 className="text-3xl font-bold">RisofloraFinance</h1>
+            <p className="text-sm text-slate-400">Dashboard financeiro — corrigido e tipado</p>
           </div>
-
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <button onClick={() => setDark(false)} className={`px-3 py-1 rounded-lg bg-white text-blue-600`}>Claro</button>
-              <button onClick={() => setDark(true)} className={`px-3 py-1 rounded-lg text-white ${dark ? 'bg-transparent' : 'bg-gradient-to-r from-purple-600 to-blue-500'}`}>Escuro</button>
+              <button onClick={() => setDark(false)} className={`px-3 py-1 rounded-lg ${!dark ? 'bg-white text-slate-900' : 'bg-slate-700 text-white'}`}>Claro</button>
+              <button onClick={() => setDark(true)} className={`px-3 py-1 rounded-lg ${dark ? 'bg-gradient-to-r from-purple-600 to-blue-500 text-white' : 'bg-slate-700 text-white'}`}>Escuro</button>
             </div>
 
-            <button onClick={() => setModalOpen(true)} className="px-4 py-2 rounded bg-gradient-to-r from-green-400 to-emerald-400 text-slate-900 font-semibold shadow">+ Nova transação</button>
+            <button onClick={() => setModalOpen(true)} className="px-4 py-2 rounded bg-gradient-to-r from-green-500 to-emerald-400 text-slate-900 font-semibold">+ Nova transação</button>
 
             <div className="relative">
               <input ref={fileRef} type="file" accept=".csv,text/csv" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-              <button onClick={() => fileRef.current?.click()} className="px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-500 shadow">Importar CSV</button>
+              <button onClick={() => fileRef.current?.click()} className="px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-500">Importar CSV</button>
             </div>
           </div>
         </header>
 
-        {/* Import summary (sutil) */}
-        {importSummary && (
-          <div className="p-3 rounded-lg bg-white/10 text-sm max-w-md">{importSummary.imported} transações importadas • {importSummary.duplicates} duplicatas ignoradas</div>
-        )}
-
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 space-y-4">
-            {/* Resumo ampliado com cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="from-white/5 to-white/2 border border-white/10">
-                <div className="text-sm text-white/80">Total Entradas</div>
-                <div className="text-2xl font-bold mt-2">{formatarValor(entradas || 0)}</div>
-                <div className="text-xs text-white/60 mt-1">vs previous month</div>
-              </Card>
+            {/* Resumo ampliado */}
+            <Card className="from-slate-900 to-slate-800 border border-slate-700">
+              <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between">
+                <div>
+                  <div className="text-sm text-slate-300">Resumo (filtrado)</div>
+                  <div className={`text-3xl font-bold ${saldo >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>{formatarValor(saldo)}</div>
+                  <div className="mt-2 text-xs text-slate-400">Entradas: {formatarValor(entradas)} • Saídas: {formatarValor(saidas)}</div>
 
-              <Card className="bg-gradient-to-br from-purple-500 to-indigo-500 text-white border border-white/10">
-                <div className="text-sm">Total Saídas</div>
-                <div className="text-2xl font-bold mt-2">{formatarValor(saidas || 0)}</div>
-                <div className="text-xs mt-1 opacity-90">vs previous month</div>
-              </Card>
-
-              <div className='bg-white rounded-lg p-5'>
-                <div className="text-xl text-gray-600 font-bold">Saldo Total</div>
-                <div className={`text-5xl font-bold mt-2 ${saldo > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatarValor(saldo)}</div>
-                <div className="text-sm text-gray-600 bold-500 mt-1">{formatarValor(entradas)} - {formatarValor(saidas)}</div>
-              </div>
-
-              <Card>
-                <div className="mt-3 space-y-1 text-xs text-white/60">
-                  <div className='text-sm'>Total de transações:</div>
-                  <div className='text-2xl font-bold mt-2'>{transFiltradas.length}</div>
-                  <div className='text-xs'>
-                    Ticket médio:{' '}
-                    {formatarValor(
-                      transFiltradas.length > 0
-                        ? (entradas + saidas) / transFiltradas.length
-                        : 0
-                    )}
+                  <div className="mt-3 text-sm text-slate-300 grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div className="bg-white/5 p-2 rounded">Transações: <div className="font-semibold">{transFiltradas.length}</div></div>
+                    <div className="bg-white/5 p-2 rounded">Média | valor: <div className="font-semibold">{formatarValor(Math.round((transFiltradas.length ? transFiltradas.reduce((s, t) => s + Math.abs(t.valor), 0) / transFiltradas.length : 0) * 100) / 100)}</div></div>
+                    <div className="bg-white/5 p-2 rounded">Arquivos: <div className="font-semibold">{Array.from(new Set(trans.map((t) => t.origemArquivo || 'Manual'))).length}</div></div>
+                    <div className="bg-white/5 p-2 rounded">Categorias: <div className="font-semibold">{Array.from(new Set(trans.map((t) => t.categoria))).length}</div></div>
                   </div>
                 </div>
-              </Card>
 
-            </div>
+                <div className="w-64">
+                  <h4 className="text-sm text-slate-300 mb-2">Destaques</h4>
+                  <div className="text-sm space-y-2">
+                    <div className="flex justify-between"><span>Maior entrada</span><span className="font-semibold">{((): string => { const e = [...transFiltradas].filter(t=>t.valor>0).sort((a,b)=>b.valor-a.valor)[0]; return e ? `${e.data} • ${formatarValor(e.valor)}` : '—'; })()}</span></div>
+                    <div className="flex justify-between"><span>Maior saída</span><span className="font-semibold">{((): string => { const s = [...transFiltradas].filter(t=>t.valor<0).sort((a,b)=>Math.abs(b.valor)-Math.abs(a.valor))[0]; return s ? `${s.data} • ${formatarValor(s.valor)}` : '—'; })()}</span></div>
+                    <div className="flex justify-between"><span>Última entrada</span><span className="font-semibold">{((): string => { const e = [...transFiltradas].filter(t=>t.valor>0).sort((a,b)=>dataParaTimestamp(b.data)-dataParaTimestamp(a.data))[0]; return e ? `${e.data} • ${formatarValor(e.valor)}` : '—'; })()}</span></div>
+                    <div className="flex justify-between"><span>Última saída</span><span className="font-semibold">{((): string => { const s = [...transFiltradas].filter(t=>t.valor<0).sort((a,b)=>dataParaTimestamp(b.data)-dataParaTimestamp(a.data))[0]; return s ? `${s.data} • ${formatarValor(s.valor)}` : '—'; })()}</span></div>
+                  </div>
+
+                  <div className="mt-3">
+                    <h5 className="text-sm text-slate-300 mb-1">Top categorias</h5>
+                    <ul className="text-sm space-y-1">
+                      {categoriasResumo.slice(0, 4).map((c, i) => (
+                        <li key={c.name} className="flex justify-between"><span>{i + 1}. {c.name}</span><span className="font-semibold">{formatarValor(c.value)}</span></li>
+                      ))}
+                      {categoriasResumo.length === 0 && <li className="text-slate-500">—</li>}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </Card>
 
             {/* Gráficos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
+              <Card className="from-white/5 to-white/0 border border-slate-700">
                 <h4 className="font-semibold mb-2">Gastos por categoria</h4>
                 <GraficoPizza dados={categoriasResumo.slice(0, 8)} />
               </Card>
 
-              <Card>
+              <Card className="from-white/5 to-white/0 border border-slate-700">
                 <h4 className="font-semibold mb-2">Evolução do saldo</h4>
                 <GraficoLinha pontos={timeline} />
               </Card>
             </div>
 
             {/* Lista com paginação e edição de categoria */}
-            <Card>
+            <Card className="from-white/5 to-white/0 border border-slate-700">
               <div className="flex justify-between items-center mb-3">
                 <h4 className="font-semibold">Transações</h4>
                 <div className="flex items-center gap-2">
@@ -745,10 +701,10 @@ export default function DashboardFinanceiro() {
 
               <div className="space-y-3">
                 {transFiltradas.slice(start, end).map((t) => (
-                  <div key={t.identificador} className="p-3 rounded-xl bg-white/6 border border-white/6 flex justify-between items-center">
+                  <div key={t.identificador} className="p-3 rounded-xl bg-gradient-to-r from-slate-800/60 to-slate-700/50 border border-slate-700 flex justify-between items-center">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <div className="text-sm text-white/80">{t.data}</div>
+                        <div className="text-sm text-slate-300">{t.data}</div>
 
                         {editingCategoriaFor === t.identificador ? (
                           <div className="flex items-center gap-2">
@@ -762,7 +718,7 @@ export default function DashboardFinanceiro() {
                                 }
                                 atribuirCategoria(t.identificador, val);
                               }}
-                              className="p-1 rounded bg-slate-700 text-sm"
+                              className="p-1 rounded bg-slate-700"
                             >
                               {categorias.map((cOpt) => (
                                 <option key={cOpt} value={cOpt}>
@@ -777,42 +733,42 @@ export default function DashboardFinanceiro() {
                                 <input
                                   value={novaCategoriaTempForId[t.identificador] || ''}
                                   onChange={(e) => setNovaCategoriaTempForId((s) => ({ ...s, [t.identificador]: e.target.value }))}
-                                  className="p-1 rounded bg-slate-700 text-sm"
+                                  className="p-1 rounded bg-slate-700"
                                   placeholder="Nova categoria"
                                 />
                                 <button
                                   onClick={() => criarEAtribuirNovaCategoria(t.identificador, novaCategoriaTempForId[t.identificador] || '')}
-                                  className="px-2 py-1 rounded bg-indigo-500 text-white text-sm"
+                                  className="px-2 py-1 rounded bg-indigo-500"
                                 >
                                   Criar
                                 </button>
-                                <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600 text-sm">Cancelar</button>
+                                <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600">Cancelar</button>
                               </div>
                             ) : (
-                              <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600 text-sm">OK</button>
+                              <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600">OK</button>
                             )}
                           </div>
                         ) : (
                           <>
                             <span className="font-medium truncate max-w-xl">{t.descricao}</span>
-                            <button onClick={() => setEditingCategoriaFor(t.identificador)} className="ml-2 text-xs bg-white/8 px-2 py-0.5 rounded">{t.categoria}</button>
+                            <button onClick={() => setEditingCategoriaFor(t.identificador)} className="ml-2 text-xs bg-white/5 px-2 py-0.5 rounded">{t.categoria}</button>
                           </>
                         )}
                       </div>
 
-                      <div className="text-xs text-white/60 mt-1">
+                      <div className="text-xs text-slate-400 mt-1">
                         {t.destinatario ? `Para: ${t.destinatario}` : 'Sem destinatário'} {t.formaPagamento ? `• ${t.formaPagamento}` : ''} {t.parcelas ? `• ${t.parcelas}` : ''} • {t.origemArquivo || 'Manual'}
                       </div>
                     </div>
 
                     <div className="text-right ml-4">
-                      <div className={`font-semibold ${t.valor >= 0 ? 'text-emerald-300' : 'text-rose-400'}`}>{formatarValor(t.valor)}</div>
-                      <div className="text-xs text-white/60 mt-1">ID: {t.identificador}</div>
+                      <div className={`font-semibold ${t.valor >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>{formatarValor(t.valor)}</div>
+                      <div className="text-xs text-slate-400 mt-1">ID: {t.identificador}</div>
                     </div>
                   </div>
                 ))}
 
-                {transFiltradas.length === 0 && <div className="text-sm text-white/60 p-4">Nenhuma transação encontrada</div>}
+                {transFiltradas.length === 0 && <div className="text-sm text-slate-500 p-4">Nenhuma transação encontrada</div>}
               </div>
 
               {/* paginação simples */}
@@ -820,43 +776,79 @@ export default function DashboardFinanceiro() {
                 <div className="flex gap-2">
                   <button disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Primeira</button>
                   <button disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Anterior</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Próxima</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Última</button>
+                  <button disabled={page >= total} onClick={() => setPage(Math.min(total, page + 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Próxima</button>
+                  <button disabled={page >= total} onClick={() => setPage(total)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40">Última</button>
                 </div>
-                <div className="text-sm text-white/70">Página {page} de {totalPages}</div>
+                <div className="text-sm text-slate-400">Página {page} de {total}</div>
               </div>
 
               {/* exportar no final */}
               <div className="mt-4 flex justify-end">
-                <button onClick={() => {
-                  // exporta todas as filtradas
-                  const toExport = transFiltradas;
-                  if (!toExport.length) return;
-                  const headers = ['Data', 'Valor', 'Descrição', 'Categoria', 'FormaPagamento', 'Destinatário', 'Parcelas', 'Origem', 'ID'];
-                  const rows = toExport.map((t) => [
-                    t.data,
-                    t.valor,
-                    t.descricao,
-                    t.categoria,
-                    t.formaPagamento || '',
-                    t.destinatario || '',
-                    t.parcelas || '',
-                    t.origemArquivo || '',
-                    t.identificador,
-                  ]);
-                  const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
-                  a.href = url;
-                  a.download = `transacoes_filtradas_${new Date().toISOString().slice(0, 10)}.csv`;
-                  a.click();
-                  URL.revokeObjectURL(url);
-
-                }} className="px-4 py-2 rounded bg-gradient-to-r from-purple-500 to-pink-500">Exportar transações (filtradas)</button>
+                <button onClick={() => exportCsv(transFiltradas)} className="px-4 py-2 rounded bg-gradient-to-r from-purple-500 to-pink-500">Exportar transações (filtradas)</button>
               </div>
             </Card>
           </div>
+
+          <aside className="space-y-4">
+            <Card className="from-white/5 to-white/0 border border-slate-700">
+              <h4 className="font-semibold mb-2">Resumo rápido</h4>
+              <div className="grid grid-cols-1 gap-3">
+                <div className="p-2 rounded bg-white/3">
+                  <div className="text-xs text-slate-300">Entradas</div>
+                  <div className="font-semibold text-emerald-300">{formatarValor(entradas)}</div>
+                </div>
+                <div className="p-2 rounded bg-white/3">
+                  <div className="text-xs text-slate-300">Saídas</div>
+                  <div className="font-semibold text-red-400">{formatarValor(saidas)}</div>
+                </div>
+                <div className="p-2 rounded bg-white/3">
+                  <div className="text-xs text-slate-300">Saldo</div>
+                  <div className={`font-semibold ${saldo >= 0 ? 'text-emerald-300' : 'text-red-400'}`}>{formatarValor(saldo)}</div>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="from-white/5 to-white/0 border border-slate-700">
+              <h4 className="font-semibold mb-2">Top destinatários</h4>
+              <ul className="space-y-2">
+                {topDest.map((d, i) => (
+                  <li key={i} className="flex justify-between items-center">
+                    <div className="text-sm truncate max-w-[140px]">{d.nome}</div>
+                    <div className={`font-medium ${d.tipo === 'entrada' ? 'text-emerald-300' : 'text-red-400'}`}>{formatarValor(d.total)}</div>
+                  </li>
+                ))}
+                {topDest.length === 0 && <li className="text-sm text-slate-500">Nenhum destinatário</li>}
+              </ul>
+            </Card>
+
+            <Card className="from-white/5 to-white/0 border border-slate-700">
+              <h4 className="font-semibold mb-2">Categorias</h4>
+              <div className="flex flex-wrap gap-2">
+                {categorias.map((c) => (
+                  <button key={c} onClick={() => setCategoriaFiltro(c)} className={`px-2 py-1 rounded ${categoriaFiltro === c ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-slate-700 text-white'}`}>{c}</button>
+                ))}
+              </div>
+              <div className="mt-3">
+                <label className="text-xs text-slate-300">Adicionar categoria</label>
+                <div className="flex gap-2 mt-2">
+                  <input id="nova-cat" placeholder="Nova categoria" className="p-2 rounded bg-slate-700 text-white flex-1" />
+                  <button
+                    onClick={() => {
+                      const el = document.getElementById('nova-cat') as HTMLInputElement | null;
+                      if (!el) return;
+                      const v = el.value.trim();
+                      if (!v) return;
+                      criarCategoria(v);
+                      el.value = '';
+                    }}
+                    className="px-3 py-2 rounded bg-gradient-to-r from-indigo-500 to-purple-500"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </aside>
         </section>
       </div>
 
