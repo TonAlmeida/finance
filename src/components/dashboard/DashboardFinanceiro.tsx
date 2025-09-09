@@ -14,14 +14,6 @@ import {
   CartesianGrid,
 } from 'recharts';
 
-/**
- * DashboardFinanceiro_improved.tsx
- * - Arquivo único (TypeScript + React) — mantive a estrutura e funcionalidades
- * - Melhorias visuais (cards, grid, destaque, feedback de import, donut à direita)
- * - Componentizei dentro do mesmo arquivo para facilitar futura extração
- * - Use TailwindCSS + recharts (instalar `recharts`)
- */
-
 /******************************
  * Types & Constants
  ******************************/
@@ -425,7 +417,7 @@ function ModalNovaTransacao({
 }
 
 /******************************
- * Main: DashboardFinanceiro (improved)
+ * Main: DashboardFinanceiro
  ******************************/
 export default function DashboardFinanceiro() {
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -646,27 +638,45 @@ export default function DashboardFinanceiro() {
     setEditingCategoriaFor(null);
   }
 
+  //limpar dados
+  function limpardados() {
+    setTrans([])
+    localStorage.clear();
+  }
+
+  //Formatar data
+  function formatDate(dateString: string) {
+  const d = new Date(dateString);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`; // formato DD/MM/YYYY
+}
+
+
   return (
-    <div className={`${dark ? 'bg-gradient-to-br from-purple-700 to-indigo-600 text-white' : 'bg-white text-slate-900'} min-h-screen p-8`}> 
+    <div className={`${dark ? 'bg-gradient-to-br from-purple-700 to-indigo-600 text-white' : 'bg-white text-slate-900'} min-h-screen p-8 md:flex`}> 
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <header className="flex flex-col md:flex-row items-start md:items-center gap-4 justify-between">
+        <header className="max-w-4xl flex flex-col gap-4 justify-between items-center md:flex-row">
           <div>
-            <h1 className="text-5xl font-bold drop-shadow">RisofloraFinance</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold drop-shadow">RisofloraFinance</h1>
             <p className="text-sm text-white/80 mt-1">um pé na roça e outro no jardim</p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-center gap-3 sm:flex-row">{/*aqui edita o layout dos botões no início*/}
             <div className="flex items-center gap-2">
-              <button onClick={() => setDark(false)} className={`px-3 py-1 rounded-lg bg-white text-blue-600`}>Claro</button>
-              <button onClick={() => setDark(true)} className={`px-3 py-1 rounded-lg text-white ${dark ? 'bg-transparent' : 'bg-gradient-to-r from-purple-600 to-blue-500'}`}>Escuro</button>
+              <button onClick={() => setDark(false)} className={`cursor-pointer px-3 py-1 rounded-lg bg-white text-blue-600`}>Claro</button>
+              <button onClick={() => setDark(true)} className={`cursor-pointer px-3 py-1 rounded-lg text-white ${dark ? 'bg-transparent' : 'bg-gradient-to-r from-purple-600 to-blue-500'}`}>Escuro</button>
             </div>
 
-            <button onClick={() => setModalOpen(true)} className="px-4 py-2 rounded bg-gradient-to-r from-green-400 to-emerald-400 text-slate-900 font-semibold shadow">+ Nova transação</button>
+            <div className='flex gap-3 p-3'>
+              <button onClick={() => setModalOpen(true)} className="cursor-pointer px-4 py-2 rounded bg-gradient-to-r from-green-400 to-emerald-400 text-slate-900 font-semibold shadow sm:text-xs">+ Nova transação</button>
 
-            <div className="relative">
-              <input ref={fileRef} type="file" accept=".csv,text/csv" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-              <button onClick={() => fileRef.current?.click()} className="px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-500 shadow">Importar CSV</button>
+              <div className="relative">
+                <input ref={fileRef} type="file" accept=".csv,text/csv" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+                <button onClick={() => fileRef.current?.click()} className="cursor-pointer px-3 py-2 rounded bg-gradient-to-r from-blue-500 to-indigo-500 shadow sm:text-xs">Importar CSV</button>
+              </div>
             </div>
           </div>
         </header>
@@ -676,7 +686,7 @@ export default function DashboardFinanceiro() {
           <div className="p-3 rounded-lg bg-white/10 text-sm max-w-md">{importSummary.imported} transações importadas • {importSummary.duplicates} duplicatas ignoradas</div>
         )}
 
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="max-w-4xl grid grid-cols-1 xl:grid-cols-2 gap-6">
           <div className="lg:col-span-2 space-y-4">
             {/* Resumo ampliado com cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -693,8 +703,8 @@ export default function DashboardFinanceiro() {
               </Card>
 
               <div className='bg-white rounded-lg p-5'>
-                <div className="text-2xl font-bold mt-2">Saldo Total</div>
-                <div className={`text-5xl font-bold mt-2 ${saldo > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatarValor(saldo)}</div>
+                <div className={`text-2xl font-bold mt-2 text-black`}>Saldo Total</div>
+                <div className={`text-3xl font-bold mt-2 ${saldo > 0 ? 'text-green-500' : 'text-red-500'}`}>{formatarValor(saldo)}</div>
                 <div className="text-sm text-gray-600 bold-500 mt-1">{formatarValor(entradas)} - {formatarValor(saidas)}</div>
               </div>
 
@@ -730,11 +740,11 @@ export default function DashboardFinanceiro() {
 
             {/* Lista com paginação e edição de categoria */}
             <Card>
-              <div className="flex justify-between items-center mb-3">
+              <div style={{flexDirection: 'column'}} className="flex justify-between items-start mb-3">
                 <h4 className="font-semibold">Transações</h4>
-                <div className="flex items-center gap-2">
+                <div className="flex gap-2 flex-col sm:flex-row sm:items-center">
                   <input placeholder="Pesquisar..." value={termo} onChange={(e) => setTermo(e.target.value)} className="p-2 rounded bg-slate-700 text-white" />
-                  <select value={String(limite)} onChange={(e) => setLimite(Number(e.target.value))} className="p-2 rounded bg-slate-700 text-white">
+                  <select value={String(limite)} onChange={(e) => setLimite(Number(e.target.value))} className="cursor-pointer p-2 rounded bg-slate-700 text-white">
                     <option value={10}>10</option>
                     <option value={20}>20</option>
                     <option value={50}>50</option>
@@ -762,10 +772,10 @@ export default function DashboardFinanceiro() {
                                 }
                                 atribuirCategoria(t.identificador, val);
                               }}
-                              className="p-1 rounded bg-slate-700 text-sm"
+                              className="cursor-pointer p-1 rounded bg-slate-700 text-sm"
                             >
                               {categorias.map((cOpt) => (
-                                <option key={cOpt} value={cOpt}>
+                                <option className='cursor-pointer' key={cOpt} value={cOpt}>
                                   {cOpt}
                                 </option>
                               ))}
@@ -782,20 +792,20 @@ export default function DashboardFinanceiro() {
                                 />
                                 <button
                                   onClick={() => criarEAtribuirNovaCategoria(t.identificador, novaCategoriaTempForId[t.identificador] || '')}
-                                  className="px-2 py-1 rounded bg-indigo-500 text-white text-sm"
+                                  className="cursor-pointer px-2 py-1 rounded bg-indigo-500 text-white text-sm"
                                 >
                                   Criar
                                 </button>
-                                <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600 text-sm">Cancelar</button>
+                                <button onClick={() => setEditingCategoriaFor(null)} className="cursor-pointer px-2 py-1 rounded bg-slate-600 text-sm">Cancelar</button>
                               </div>
                             ) : (
-                              <button onClick={() => setEditingCategoriaFor(null)} className="px-2 py-1 rounded bg-slate-600 text-sm">OK</button>
+                              <button onClick={() => setEditingCategoriaFor(null)} className="cursor-pointer px-2 py-1 rounded bg-slate-600 text-sm">OK</button>
                             )}
                           </div>
                         ) : (
                           <>
                             <span className="font-medium truncate max-w-xl">{t.descricao}</span>
-                            <button onClick={() => setEditingCategoriaFor(t.identificador)} className="ml-2 text-xs bg-white/8 px-2 py-0.5 rounded">{t.categoria}</button>
+                            <button onClick={() => setEditingCategoriaFor(t.identificador)} className="cursor-pointer ml-2 text-xs bg-white/8 px-2 py-0.5 rounded">{t.categoria}</button>
                           </>
                         )}
                       </div>
@@ -818,47 +828,63 @@ export default function DashboardFinanceiro() {
               {/* paginação simples */}
               <div className="flex items-center justify-between mt-4">
                 <div className="flex gap-2">
-                  <button disabled={page <= 1} onClick={() => setPage(1)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Primeira</button>
-                  <button disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white/90">Anterior</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))} className={`px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white`}>Próxima</button>
-                  <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Última</button>
+                  <button disabled={page <= 1} onClick={() => setPage(1)} className="text-xs sm:text-sm cursor-pointer px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Primeira</button>
+                  <button disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className="text-xs sm:text-sm cursor-pointer px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white/90">Anterior</button>
+                  <button disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))} className={`text-xs sm:text-sm cursor-pointer px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white`}>Próxima</button>
+                  <button disabled={page >= totalPages} onClick={() => setPage(totalPages)} className="text-xs sm:text-sm cursor-pointer px-2 py-1 rounded bg-slate-700 disabled:opacity-40 text-white">Última</button>
                 </div>
-                <div className="text-sm text-white/70">Página {page} de {totalPages}</div>
               </div>
-
+              <p className="text-sm text-white/70">Página {page} de {totalPages}</p>
               {/* exportar no final */}
-              <div className="mt-4 flex justify-end">
-                <button onClick={() => {
+              <div className="flex flex-col mt-4 items-center justify-start sm:justify-between sm:flex-row sm:items-start">
+                &copy; Tonzinho
+                <div className='flex gap-2'>
+                  <button onClick={() => {
                   // exporta todas as filtradas
                   const toExport = transFiltradas;
                   if (!toExport.length) return;
-                  const headers = ['Data', 'Valor', 'Descrição', 'Categoria', 'FormaPagamento', 'Destinatário', 'Parcelas', 'Origem', 'ID'];
+                  
+
+                  const headers = ['Data', 'Valor', 'Identificador', 'Descrição'];
+
                   const rows = toExport.map((t) => [
-                    t.data,
-                    t.valor,
-                    t.descricao,
-                    t.categoria,
-                    t.formaPagamento || '',
-                    t.destinatario || '',
-                    t.parcelas || '',
-                    t.origemArquivo || '',
-                    t.identificador,
+                    formatDate(t.data),
+                    Number(t.valor).toFixed(2), // já é number, não precisa de replace
+                    t.identificador ?? '',
+                    t.descricao ?? '',
                   ]);
-                  const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
+
+
+                  // Monta CSV com escape de aspas
+                  const csv = [
+                    headers.join(','), // cabeçalho
+                    ...rows.map((r) =>
+                      r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')
+                    ),
+                  ].join('\n') + '\n';
+
+                  // Cria e baixa o CSV
                   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
-                  a.download = `transacoes_filtradas_${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.download = `transacoes_filtradas_${new Date().toISOString().slice(0,10)}.csv`;
                   a.click();
                   URL.revokeObjectURL(url);
 
-                }} className="px-4 py-2 rounded bg-gradient-to-r from-purple-500 to-pink-500">Exportar transações (filtradas)</button>
+
+
+
+
+                }} className="text-xs sm:text-md px-4 py-2 rounded bg-gradient-to-r from-purple-500 to-pink-500">Exportar transações (filtradas)</button>
+                <button onClick={limpardados} className='hover:bg-red-500/60 text-xs sm:text-md cursor-pointer py-2 px-4 text-white/80 border-2 border-red-400 rounded-lg'>LIMPAR DADOS</button>
+                </div>
               </div>
             </Card>
           </div>
         </section>
       </div>
+
 
       <ModalNovaTransacao open={modalOpen} onClose={() => setModalOpen(false)} categorias={categorias} adicionar={adicionarTransacao} />
     </div>
